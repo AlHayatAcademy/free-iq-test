@@ -14,6 +14,8 @@
 
   var N = Qs.length;
   var KEY = 'iqtestlab:session:v1';
+  var HKEY = 'iqtestlab:history:v1';
+  var RETAKE_DAYS = 28;
   var ORDER = ['patterns', 'numbers', 'words', 'logic'];
   var DOMAINS = {
     patterns: { name: 'Patterns', title: 'Pattern reasoning', what: 'Spotting the rule behind a grid of shapes.',
@@ -116,9 +118,19 @@
   function load() {
     try {
       var r = JSON.parse(localStorage.getItem(KEY));
-      if (r && r.v === 1 && r.ans && r.ans.length === N && Date.now() - r.started < 24 * 3600 * 1000) { return r; }
+      var age = r ? Date.now() - r.started : 0, maxAge = r && r.done ? 90 * 864e5 : 864e5;
+      if (r && r.v === 1 && r.ans && r.ans.length === N && age < maxAge) { return r; }
     } catch (e) { /* ignore */ }
     return null;
+  }
+  function readHistory() {
+    try { var h = JSON.parse(localStorage.getItem(HKEY) || '[]'); return Array.isArray(h) ? h : []; } catch (e) { return []; }
+  }
+  function pushHistory(r) {
+    var h = readHistory();
+    h.push({ d: r.date, iq: r.iq, lo: r.low, hi: r.high, pct: r.pct, q: r.quality.level,
+      dom: { patterns: r.dom.patterns.pct, numbers: r.dom.numbers.pct, words: r.dom.words.pct, logic: r.dom.logic.pct } });
+    try { localStorage.setItem(HKEY, JSON.stringify(h.slice(-10))); } catch (e) { /* storage unavailable */ }
   }
   function clearSession() { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } }
 
@@ -222,22 +234,23 @@
   function renderIntro() {
     app.innerHTML =
       '<div class="intro">' +
+      '<div class="intro-main">' +
       '<h1 data-focus>Free IQ test</h1>' +
-      '<p class="lede">24 questions in four sections. Most people finish in 15 to 22 minutes. Your detailed report appears the moment you finish.</p>' +
-      '<dl class="facts">' +
+      '<p class="lede">24 questions in four sections, about 20 minutes. Your detailed report appears the moment you finish.</p>' +
+      '<div class="row"><button type="button" class="btn btn-primary btn-lg" data-act="begin">Begin the test</button>' +
+      '<a class="linkbtn" href="how-iq-tests-work.html">How scoring works</a></div>' +
+      '<label class="check"><input type="checkbox" id="opt-timer" checked> Show the countdown timer</label>' +
+      '<p class="small muted">An online test gives an estimate for curiosity and self-insight. It is not a clinical assessment. Designed for ages 16 and over.</p>' +
+      '</div>' +
+      '<div class="intro-side"><dl class="facts">' +
       '<div><dt>Sections</dt><dd>Patterns, Numbers, Words, Logic. Six questions each, easy to hard.</dd></div>' +
-      '<div><dt>Time</dt><dd>' + CFG.testMinutes + ' minutes in total, shown on screen. You can hide the timer.</dd></div>' +
-      '<div><dt>Guessing</dt><dd>If you are unsure, pick your best answer. Scoring adjusts for lucky guesses, so guessing never hurts you on average.</dd></div>' +
-      '<div><dt>Saving</dt><dd>Your progress saves on this device, so a refresh will not lose your answers.</dd></div>' +
+      '<div><dt>Time</dt><dd>' + CFG.testMinutes + ' minutes in total. You can hide the timer.</dd></div>' +
+      '<div><dt>Guessing</dt><dd>If unsure, pick your best answer. Scoring adjusts for lucky guesses.</dd></div>' +
+      '<div><dt>Saving</dt><dd>Progress saves on this device, so a refresh loses nothing.</dd></div>' +
       '</dl>' +
       '<div class="tips"><h2>For the most accurate result</h2><ul>' +
       '<li>Sit somewhere quiet and take it in one go.</li>' +
-      '<li>Do not search for answers or use a calculator. Pen and paper are fine.</li>' +
-      '<li>This test is designed for ages 16 and over.</li></ul></div>' +
-      '<label class="check"><input type="checkbox" id="opt-timer" checked> Show the countdown timer</label>' +
-      '<div class="row"><button type="button" class="btn btn-primary btn-lg" data-act="begin">Begin the test</button>' +
-      '<a class="btn btn-ghost" href="how-iq-tests-work.html">How scoring works</a></div>' +
-      '<p class="small muted">An online test gives an estimate for curiosity and self-insight. It is not a clinical assessment.</p>' +
+      '<li>No searching or calculator. Pen and paper are fine.</li></ul></div></div>' +
       '</div>';
     focusTitle();
   }
@@ -276,8 +289,9 @@
       '<button type="button" class="linkbtn" data-act="toggle-timer">' + (showTimer ? 'Hide timer' : 'Show timer') + '</button></div></div>' +
       '<div class="progress" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="' + N + '" aria-valuenow="' + (S.i + 1) + '"><span id="pbar"></span></div>' +
       '<h2 class="qprompt" data-focus>' + esc(q.prompt) + '</h2>' +
+      '<div class="qbody' + (q.matrix ? ' qbody-visual' : '') + '">' +
       (q.matrix ? Sheet.matrixHTML(q.matrix) : '') +
-      '<div class="opts' + (q.matrix ? ' opts-visual' : '') + '" role="radiogroup" aria-label="Answer options">' + opts + '</div>' +
+      '<div class="opts' + (q.matrix ? ' opts-visual' : '') + '" role="radiogroup" aria-label="Answer options">' + opts + '</div></div>' +
       '<div class="qnav"><button type="button" class="btn btn-ghost" data-act="prev"' + (S.i === 0 ? ' disabled' : '') + '>Back</button>' +
       '<button type="button" class="btn ' + (chosen !== null ? 'btn-primary' : 'btn-ghost') + '" data-act="next">' +
       (last ? 'Finish test' : chosen !== null ? 'Next question' : 'Skip for now') + '</button></div>' +
@@ -362,7 +376,7 @@
   function prev() { markLeave(); if (S.i > 0) { S.i--; S.view = 'q'; save(); render(); } }
   function finish() {
     markLeave(); stopTimer();
-    S.result = computeResult(); S.done = true; S.view = 'result'; save(); render();
+    S.result = computeResult(); S.done = true; S.view = 'result'; pushHistory(S.result); save(); render();
   }
 
   /* ---------- result ---------- */
@@ -491,6 +505,49 @@
         : '<p><button type="button" class="btn btn-ghost" disabled>Coming soon</button></p>') + '</section>';
   }
 
+  function dateShort(t) { return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+
+  function progressBlock(r) {
+    var prev = readHistory().filter(function (x) { return x.d !== r.date; });
+    var retake = new Date(r.date + RETAKE_DAYS * 864e5).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    var out = '<section class="rsec"><h3>Track your progress</h3>';
+    if (prev.length) {
+      var last = prev[prev.length - 1], diff = r.iq - last.iq;
+      var noise = Math.abs(diff) < 15 ? ' A change this small is within normal measurement noise.' : ' That is larger than normal measurement noise, though practice with these questions can also raise scores.';
+      out += '<p>Your previous estimate was <strong>' + last.iq + '</strong> on ' + dateShort(last.d) + '. This result is <strong>' + (diff > 0 ? '+' : '') + diff + '</strong> points different.' + noise + '</p>' +
+        '<div class="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Estimated IQ</th><th scope="col">Likely range</th></tr></thead><tbody>' +
+        prev.slice(-4).concat([{ d: r.date, iq: r.iq, lo: r.low, hi: r.high }]).map(function (x) {
+          return '<tr><td>' + dateShort(x.d) + '</td><td>' + x.iq + '</td><td>' + x.lo + ' to ' + x.hi + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    } else {
+      out += '<p>Your result is saved on this device. Retake the test from <strong>' + retake + '</strong> (four weeks, so you measure ability rather than memory) and we will show how you compare.</p>';
+    }
+    return out + '<p><button type="button" class="btn btn-ghost" data-act="reminder">Add a retake reminder to my calendar</button></p></section>';
+  }
+
+  function nextSteps() {
+    return '<section class="rsec"><h3>Keep going</h3><ul class="linklist">' +
+      '<li><a href="iq-test-sample-questions.html">IQ test sample questions</a><span>Practise the question types with worked answers.</span></li>' +
+      '<li><a href="iq-test-tips.html">How to take an IQ test</a><span>Ten tips for a stronger result next time.</span></li>' +
+      '<li><a href="online-vs-professional-iq-test.html">Online vs professional IQ test</a><span>What this estimate can and cannot tell you.</span></li></ul></section>';
+  }
+
+  function downloadReminder(r) {
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function ymd(x) { return x.getFullYear() + pad(x.getMonth() + 1) + pad(x.getDate()); }
+    var d = new Date(r.date + RETAKE_DAYS * 864e5), d2 = new Date(d.getTime() + 864e5);
+    var url = location.href.split('#')[0].split('?')[0].replace(/[^\/]*$/, '');
+    var lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//' + CFG.siteName + '//EN', 'BEGIN:VEVENT',
+      'UID:' + r.id + '@' + (location.host || 'local'), 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, ''),
+      'DTSTART;VALUE=DATE:' + ymd(d), 'DTEND;VALUE=DATE:' + ymd(d2), 'SUMMARY:Retake the IQ test',
+      'DESCRIPTION:Four weeks have passed since your last result. Retake the test to see your progress. ' + url,
+      'URL:' + url, 'END:VEVENT', 'END:VCALENDAR'];
+    var blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'retake-iq-test.ics';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  }
+
   function renderResult() {
     var r = S.result, p = profileSummary(r);
     var d = new Date(r.date), dateStr = d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -506,7 +563,8 @@
       '<article class="report">' +
       '<header class="rhead"><div><h1 data-focus>Your IQ report</h1><p class="muted">Report ' + r.id + ' · ' + dateStr + '</p></div>' +
       '<div class="rbtns"><button type="button" class="btn btn-ghost" data-act="print">Save as PDF</button>' +
-      '<button type="button" class="btn btn-ghost" data-act="share">Share result image</button></div></header>' +
+      '<button type="button" class="btn btn-ghost" data-act="share">Share result image</button>' +
+      '<button type="button" class="btn btn-ghost" data-install hidden>Install the app</button></div></header>' +
       warn +
       '<section class="score"><p class="score-lbl">Estimated IQ</p>' +
       '<p class="iqnum" id="iqnum" data-to="' + r.iq + '">' + r.iq + '</p>' +
@@ -518,6 +576,7 @@
       '<section class="rsec"><h3>Your skills profile</h3><ul class="drows">' + domainRows(r) + '</ul>' +
       '<p class="small muted">Percentages show how much of each section’s weighted points you earned, after adjusting for guessing.</p></section>' +
       (CFG.fullReportFree ? reportSections(r) : paywallCard()) +
+      progressBlock(r) + nextSteps() +
       '<section class="rsec disclaimer"><h3>Read this before you rely on the score</h3>' +
       '<p>This is a short online test. It is an estimate for curiosity and self-insight, not a clinical or diagnostic assessment, and it is not age-adjusted. The margin of error is wide (about ±' + CFG.ciHalfWidth + ' points). Sleep, stress, language and unfamiliarity with puzzle formats all affect results. ' +
       '<a href="how-iq-tests-work.html">Read how scoring works and what it cannot tell you.</a></p></section>' +
@@ -620,6 +679,7 @@
     }
     else if (a === 'print') { window.print(); }
     else if (a === 'share') { shareResult(); }
+    else if (a === 'reminder') { downloadReminder(S.result); }
   });
 
   document.addEventListener('keydown', function (e) {

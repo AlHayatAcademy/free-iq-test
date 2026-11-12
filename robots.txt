@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://drimranhayat.github.io/free-iq-test/sitemap.xml
+Sitemap: https://free-iq-test.pages.dev/sitemap.xml

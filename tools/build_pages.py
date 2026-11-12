@@ -92,7 +92,7 @@ def write(name, content):
         f.write(content)
 
 
-def head(title, desc, path, robots='index,follow,max-image-preview:large', ld=None, og_type='website'):
+def head(title, desc, path, robots='index,follow,max-image-preview:large', ld=None, og_type='website', body_class=''):
     url = canon(path)
     blocks = ''.join('<script type="application/ld+json">' + json.dumps(o, ensure_ascii=False) + '</script>\n' for o in (ld or []))
     return f'''<!doctype html>
@@ -122,7 +122,7 @@ def head(title, desc, path, robots='index,follow,max-image-preview:large', ld=No
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/assets/css/style.css">
 {blocks}</head>
-<body>
+<body{(' class="' + body_class + '"') if body_class else ''}>
 <a class="skip" href="#main">Skip to content</a>
 '''
 
@@ -132,6 +132,7 @@ def header(current):
     return f'''<header class="site-head"><div class="wrap">
 <a class="logo" href="/" aria-label="{SITE} home">{LOGO}<span>{SITE}</span></a>
 <nav class="site-nav" aria-label="Main">{links}</nav>
+<a class="btn btn-primary btn-sm head-cta" href="/test"><span class="long">Start the free IQ test</span><span class="short">Start free test</span></a>
 </div></header>
 <main id="main">
 '''
@@ -144,7 +145,7 @@ def footer():
 <div><a class="logo" href="/">{LOGO}<span>{SITE}</span></a>
 <p>{SITE} offers a free online IQ test for curiosity and self-insight. It is not a clinical or diagnostic assessment and is not age-adjusted.</p></div>
 <div><h2>Free IQ test</h2><ul><li><a href="/test">Take the IQ test</a></li>{learn}</ul></div>
-<div><h2>About</h2><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of use</a></li></ul><p class="small">&copy; 2026 {SITE}</p></div>
+<div><h2>About</h2><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of use</a></li></ul><p class="small">&copy; 2026 {SITE}</p><p><button type="button" class="linkbtn" data-install hidden>Install the app</button></p></div>
 </div></footer>
 '''
 
@@ -263,10 +264,11 @@ def build_home():
     ]
     learn = ''.join(f'<li><a href="{p}">{t}</a><span>{d}</span></li>' for p, t, d in LEARN)
     html = head(title, desc, '/', ld=ld) + header('/') + f'''
+<div class="wrap"><div class="welcome" id="welcome" hidden></div></div>
 <div class="wrap hero">
 <div>
 <h1>Free IQ test online: instant score and detailed report</h1>
-<p class="lede">Twenty-four reasoning questions across patterns, numbers, words and logic. About 20 minutes, no sign-up. When you finish, you get your estimated IQ, your percentile and a full breakdown of how you did.</p>
+<p class="lede">24 reasoning questions, about 20 minutes, no sign-up. You get your estimated IQ, percentile and a detailed report the moment you finish.</p>
 <div class="row"><a class="btn btn-primary btn-lg" href="/test">Start the free IQ test</a><a class="btn btn-ghost" href="/how-iq-tests-work">How scoring works</a></div>
 <ul class="chips-line"><li>No email or registration</li><li>Works on phone and desktop</li><li>Progress saves automatically</li><li>Honest margin of error</li></ul>
 </div>
@@ -345,7 +347,7 @@ def build_home():
 
 def build_test():
     title = f'IQ Test | {SITE}'
-    html = head(title, 'Take the free IQ test: 24 questions in four sections, instant results.', '/test', robots='noindex,follow') + header('/') + '''
+    html = head(title, 'Take the free IQ test: 24 questions in four sections, instant results.', '/test', robots='noindex,follow', body_class='page-test') + header('/') + '''
 <noscript><div class="stage"><h1>JavaScript required</h1><p>The IQ test runs in your browser, so it needs JavaScript. Please enable it and reload this page.</p></div></noscript>
 <div class="stage" id="app" aria-live="polite"><p class="muted">Loading the test…</p></div>
 ''' + footer() + scripts('config', 'sheet', 'questions', 'test')
@@ -682,7 +684,7 @@ def build_privacy():
 <p>{SITE} is built to collect as little as possible.</p>
 <h2>What we collect</h2>
 <ul>
-<li><strong>Your test answers and results.</strong> These are stored only in your browser (local storage) on your own device so you can resume the test and view your report. They are not sent to our servers. Clearing your browser data, or using &ldquo;Retake the test&rdquo;, removes them.</li>
+<li><strong>Your test answers and results.</strong> These are stored only in your browser (local storage) on your own device so you can resume the test and view your report. They are not sent to our servers. A finished report stays available for 90 days, and a short history of past scores (date, estimate and skill percentages, up to ten results) is kept so you can see your progress. Clearing your browser data removes all of it.</li>
 <li><strong>No account, no email.</strong> We do not ask for your name, email or any other personal details to take the test or see your report.</li>
 <li><strong>Basic visit statistics.</strong> We may use privacy-friendly, cookie-free analytics to count visits and see which pages are popular. This does not include your test answers.</li>
 <li><strong>Hosting logs.</strong> Our hosting provider processes standard technical data such as IP address to deliver and protect the site.</li>
@@ -780,7 +782,7 @@ def build_static():
     core = pages + ['favicon.svg', 'assets/css/style.css', 'assets/js/config.js', 'assets/js/sheet.js',
                     'assets/js/questions.js', 'assets/js/test.js', 'assets/js/home.js']
     write('sw.js', """/* Service worker: makes the site installable and lets the test open offline. */
-const VERSION = '%s-v3';
+const VERSION = '%s-v4';
 const SCOPE = self.registration.scope;
 const CORE = %s.map((p) => new URL(p, SCOPE).href);
 
@@ -803,11 +805,11 @@ self.addEventListener('fetch', (event) => {
     }).catch(() => caches.match(req).then((hit) => hit || caches.match(SCOPE))));
     return;
   }
-  // assets: serve from cache immediately and refresh in the background
-  event.respondWith(caches.match(req).then((hit) => {
-    const net = fetch(req).then((res) => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); } return res; }).catch(() => hit);
-    return hit || net;
-  }));
+  // assets: always try the network first so updates show immediately; use the cache only when offline
+  event.respondWith(fetch(req).then((res) => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
+    return res;
+  }).catch(() => caches.match(req)));
 });
 """ % (SLUG, json.dumps(core)))
     # keep the in-page brand name in sync

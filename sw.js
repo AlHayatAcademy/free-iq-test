@@ -1,7 +1,7 @@
 /* Service worker: makes the site installable and lets the test open offline. */
-const VERSION = 'iqtestlab-v3';
+const VERSION = 'iqtestlab-v4';
 const SCOPE = self.registration.scope;
-const CORE = ["./", "test.html", "iq-score-chart.html", "favicon.svg", "assets/css/style.css", "assets/js/config.js", "assets/js/sheet.js", "assets/js/questions.js", "assets/js/test.js", "assets/js/home.js"].map((p) => new URL(p, SCOPE).href);
+const CORE = ["./", "test", "iq-score-chart", "favicon.svg", "assets/css/style.css", "assets/js/config.js", "assets/js/sheet.js", "assets/js/questions.js", "assets/js/test.js", "assets/js/home.js"].map((p) => new URL(p, SCOPE).href);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSION).then((cache) => Promise.all(CORE.map((u) => cache.add(u).catch(() => null)))).then(() => self.skipWaiting()));
@@ -22,9 +22,9 @@ self.addEventListener('fetch', (event) => {
     }).catch(() => caches.match(req).then((hit) => hit || caches.match(SCOPE))));
     return;
   }
-  // assets: serve from cache immediately and refresh in the background
-  event.respondWith(caches.match(req).then((hit) => {
-    const net = fetch(req).then((res) => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); } return res; }).catch(() => hit);
-    return hit || net;
-  }));
+  // assets: always try the network first so updates show immediately; use the cache only when offline
+  event.respondWith(fetch(req).then((res) => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
+    return res;
+  }).catch(() => caches.match(req)));
 });
